@@ -26,8 +26,8 @@ export default function App() {
         lang={lang}
         onLangChange={setLang}
         muted={speech.muted}
+        speaking={speech.speaking}
         onToggleMute={speech.toggleMute}
-        canSpeak={speech.canSpeak}
       />
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -41,7 +41,11 @@ export default function App() {
       {interview.verdict ? (
         <VerdictBanner verdict={interview.verdict} onRestart={interview.restart} />
       ) : (
-        <Composer disabled={!interview.canAnswer} onSend={interview.sendAnswer} speech={speech} />
+        <Composer
+          disabled={!interview.canAnswer}
+          onSend={(text) => interview.sendAnswer(text, lang)}
+          speech={speech}
+        />
       )}
     </div>
   )

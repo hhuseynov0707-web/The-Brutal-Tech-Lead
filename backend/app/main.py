@@ -1,18 +1,19 @@
-"""FastAPI entrypoint: health check and the interview WebSocket."""
+"""FastAPI entrypoint: health check, text-to-speech and the interview WebSocket."""
 
 import json
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Query, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Query, Response, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import ValidationError
 
 from .agent import AgentError, TechLeadAgent
 from .config import get_settings
 from .questions import pick_opening_question
-from .schemas import ClientMessage, MessageType, ServerMessage
+from .schemas import ClientMessage, MessageType, ServerMessage, TTSRequest
 from .session import InterviewSession
+from .tts import TTSError, synthesize
 
 settings = get_settings()
 logging.basicConfig(
@@ -37,7 +38,7 @@ app = FastAPI(title="The Brutal Tech-Lead", version="1.0.0", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
-    allow_methods=["GET"],
+    allow_methods=["GET", "POST"],
     allow_headers=["*"],
 )
 
@@ -45,6 +46,16 @@ app.add_middleware(
 @app.get("/health")
 async def health() -> dict[str, object]:
     return {"status": "ok", "agent_ready": app.state.agent is not None, "model": settings.groq_model}
+
+
+@app.post("/tts", response_class=Response, responses={200: {"content": {"audio/mpeg": {}}}})
+async def text_to_speech(request: TTSRequest) -> Response:
+    try:
+        audio = await synthesize(request.text, request.lang)
+    except TTSError as exc:
+        logger.warning("%s", exc)
+        raise HTTPException(status_code=502, detail="Text-to-speech is unavailable") from exc
+    return Response(content=audio, media_type="audio/mpeg", headers={"Cache-Control": "no-store"})
 
 
 def _parse_client_message(raw: str) -> ClientMessage:
@@ -98,7 +109,7 @@ async def interview_websocket(websocket: WebSocket, role: str | None = Query(def
                 continue
 
             try:
-                replies = await session.answer(message.text)
+                replies = await session.answer(message.text, message.lang)
             except AgentError as exc:
                 logger.warning("Agent failure: %s", exc)
                 await _send(websocket, ServerMessage(

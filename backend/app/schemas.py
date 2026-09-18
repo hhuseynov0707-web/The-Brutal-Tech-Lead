@@ -1,6 +1,7 @@
 """Data models shared across the WebSocket protocol."""
 
 from enum import Enum
+from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -50,8 +51,17 @@ class ServerMessage(BaseModel):
     verdict: Verdict | None = None
 
 
+Language = Literal["en-US", "az-AZ", "tr-TR"]
+
+
 class ClientMessage(BaseModel):
     """Payload sent from the client to the server."""
 
     type: str = "answer"
     text: str = Field(min_length=1, max_length=4000)
+    lang: Language | None = None
+
+
+class TTSRequest(BaseModel):
+    text: str = Field(min_length=1, max_length=2000)
+    lang: Language = "en-US"

@@ -8,7 +8,7 @@ const STATUS = {
   [ReadyState.CLOSED]: { label: 'Bağlantı yoxdur', dot: 'bg-red-500' },
 }
 
-export function Header({ role, readyState, lang, onLangChange, muted, onToggleMute, canSpeak }) {
+export function Header({ role, readyState, lang, onLangChange, muted, speaking, onToggleMute }) {
   const status = STATUS[readyState] ?? STATUS[ReadyState.CLOSED]
 
   return (
@@ -45,17 +45,17 @@ export function Header({ role, readyState, lang, onLangChange, muted, onToggleMu
           ))}
         </div>
 
-        {canSpeak && (
-          <button
-            type="button"
-            onClick={onToggleMute}
-            aria-pressed={muted}
-            title={muted ? 'Səsi aç' : 'Səsi bağla'}
-            className="rounded-full border border-neutral-800 bg-neutral-900 px-3 py-1.5 text-xs text-neutral-300 transition-colors hover:border-neutral-600"
-          >
-            {muted ? '🔇 Səssiz' : '🔊 Səsli'}
-          </button>
-        )}
+        <button
+          type="button"
+          onClick={onToggleMute}
+          aria-pressed={muted}
+          title={muted ? 'Səsi aç' : 'Səsi bağla'}
+          className={`rounded-full border bg-neutral-900 px-3 py-1.5 text-xs text-neutral-300 transition-colors hover:border-neutral-600 ${
+            speaking ? 'animate-pulse border-red-700' : 'border-neutral-800'
+          }`}
+        >
+          {muted ? '🔇 Səssiz' : speaking ? '🔊 Danışır…' : '🔊 Səsli'}
+        </button>
       </div>
     </header>
   )

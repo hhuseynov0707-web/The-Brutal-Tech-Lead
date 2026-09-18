@@ -6,7 +6,8 @@ Sərt Tech-Lead ilə real vaxtda texniki **stress müsahibəsi** simulyatoru. Na
 
 - **Real vaxt WebSocket** əlaqəsi, avtomatik yenidən qoşulma (exponential backoff)
 - **Kontekstli agent** — söhbət tarixçəsini xatırlayır, əvvəlki cavablara əsasən sual verir
-- **Səsli rejim** — Speech-to-Text (mikrofon) və Text-to-Speech (EN / AZ / TR), səssiz rejim
+- **Təbii səs** — Microsoft Edge neural səsləri ilə TTS (`edge-tts`, pulsuz, API açarı lazım deyil); işləməsə brauzer səsinə keçir
+- **Səsli rejim** — Speech-to-Text (mikrofon), EN / AZ / TR dil seçimi; agent seçilmiş dildə cavab verir, səssiz rejim
 - **Müsahibə qaydaları** — maksimum raund sayı, ard-arda 3 zəif cavabda erkən rədd
 - **Rol üzrə sual bankı**, istəyə bağlı Selenium scraper
 - Konfiqurasiya `.env` ilə, API açarları kodda deyil
@@ -18,11 +19,12 @@ Sərt Tech-Lead ilə real vaxtda texniki **stress müsahibəsi** simulyatoru. Na
 brutal-tech-lead/
 ├── backend/                  FastAPI + Groq
 │   ├── app/
-│   │   ├── main.py           HTTP /health + WebSocket /ws/interview
+│   │   ├── main.py           HTTP /health, POST /tts + WebSocket /ws/interview
 │   │   ├── config.py         .env-dən ayarlar
 │   │   ├── agent.py          Groq LLM agenti, JSON cavabın təhlili
 │   │   ├── session.py        Müsahibə vəziyyəti: tarixçə, ballar, bitmə qaydaları
 │   │   ├── questions.py      Açılış sualları (sual bankı)
+│   │   ├── tts.py            edge-tts neural səs sintezi
 │   │   ├── scraper.py        İstəyə bağlı Selenium scraper
 │   │   └── schemas.py        Pydantic modelləri (protokol)
 │   └── tests/
@@ -87,6 +89,7 @@ Brauzerdə <http://localhost:5173> açın. Səs funksiyaları üçün Chrome və
 | --- | --- |
 | `VITE_WS_URL` | `ws://127.0.0.1:8003/ws/interview` |
 | `VITE_INTERVIEW_ROLE` | `AI Engineer` |
+| `VITE_API_URL` | `VITE_WS_URL`-in hostu (`http://127.0.0.1:8003`) |
 
 ## WebSocket protokolu
 
@@ -95,8 +98,10 @@ Brauzerdə <http://localhost:5173> açın. Səs funksiyaları üçün Chrome və
 Client → server:
 
 ```json
-{ "type": "answer", "text": "Namizədin cavabı" }
+{ "type": "answer", "text": "Namizədin cavabı", "lang": "az-AZ" }
 ```
+
+`lang` (`en-US` | `az-AZ` | `tr-TR`) istəyə bağlıdır — agent cavabı həmin dildə yazır.
 
 Server → client:
 
@@ -111,6 +116,23 @@ Server → client:
   "verdict": "hired | rejected | null"
 }
 ```
+
+## Text-to-Speech
+
+`POST /tts` → `audio/mpeg`
+
+```json
+{ "text": "Cavabın səthidir.", "lang": "az-AZ" }
+```
+
+| Dil | Səs |
+| --- | --- |
+| `en-US` | `en-US-ChristopherNeural` |
+| `az-AZ` | `az-AZ-BabekNeural` |
+| `tr-TR` | `tr-TR-AhmetNeural` |
+
+Səslər, sürət və ton `backend/app/tts.py` faylında dəyişdirilə bilər (`edge-tts --list-voices` bütün səsləri göstərir).
+`edge-tts` Microsoft-un rəsmi olmayan servisindən istifadə edir — tədris/şəxsi layihələr üçün uyğundur, kommersiya üçün etibarlı deyil.
 
 ## Testlər
 

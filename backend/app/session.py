@@ -13,6 +13,8 @@ FAIL_STREAK = 3
 FAIL_THRESHOLD = 30
 PASS_THRESHOLD = 60
 
+LANGUAGE_NAMES = {"en-US": "ingilis", "az-AZ": "Azərbaycan", "tr-TR": "türk"}
+
 
 @dataclass
 class InterviewSession:
@@ -44,12 +46,19 @@ class InterviewSession:
     def _context(self) -> list[dict[str, str]]:
         return [self.system_message, *self._history[-self.history_window :]]
 
-    async def answer(self, text: str) -> list[ServerMessage]:
-        """Evaluate a candidate answer and return the messages to send back."""
+    async def answer(self, text: str, lang: str | None = None) -> list[ServerMessage]:
+        """Evaluate a candidate answer and return the messages to send back.
+
+        `lang` is the UI voice language; the reply is requested in it so the
+        text-to-speech voice matches what it has to read.
+        """
         if self.finished:
             return []
 
-        self._history.append({"role": "user", "content": f"Namizədin cavabı: {text}"})
+        content = f"Namizədin cavabı: {text}"
+        if lang in LANGUAGE_NAMES:
+            content += f'\n\n("response" sahəsini yalnız {LANGUAGE_NAMES[lang]} dilində yaz.)'
+        self._history.append({"role": "user", "content": content})
         try:
             evaluation = await self.evaluator(self._context())
         except Exception:

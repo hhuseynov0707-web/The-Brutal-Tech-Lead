@@ -73,10 +73,10 @@ export function useInterview({ onAgentReply } = {}) {
   const canAnswer = isConnected && !awaitingReply && !verdict
 
   const sendAnswer = useCallback(
-    (text) => {
+    (text, lang) => {
       const trimmed = text.trim()
       if (!trimmed || !canAnswer) return false
-      if (!send(JSON.stringify({ type: 'answer', text: trimmed }))) return false
+      if (!send(JSON.stringify({ type: 'answer', text: trimmed, lang }))) return false
       setMessages((prev) => [...prev, { id: nextId(), role: 'candidate', type: 'answer', text: trimmed }])
       setAwaitingReply(true)
       return true

@@ -57,3 +57,22 @@ def test_failed_evaluation_does_not_corrupt_history():
     assert len(session._history) == 1
     run(session.answer("a"))
     assert session.turn == 1
+
+
+def test_language_instruction_is_added_to_answer():
+    seen = []
+
+    async def evaluator(messages):
+        seen.append(messages[-1]["content"])
+        return Evaluation(response="ok", tech_score=70, stress_score=20)
+
+    session = InterviewSession(
+        role="AI Engineer",
+        first_question="Q1?",
+        system_message={"role": "system", "content": "sys"},
+        evaluator=evaluator,
+    )
+    run(session.answer("cavab", "az-AZ"))
+    run(session.answer("answer"))
+    assert "Azərbaycan dilində" in seen[0]
+    assert seen[1] == "Namizədin cavabı: answer"
