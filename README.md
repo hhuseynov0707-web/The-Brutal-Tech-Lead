@@ -51,10 +51,10 @@ copy .env.example .env         # macOS/Linux: cp .env.example .env
 `.env` faylında `GROQ_API_KEY` dəyərini doldurun, sonra:
 
 ```bash
-uvicorn app.main:app --reload --port 8000
+uvicorn app.main:app --reload --port 8003
 ```
 
-Yoxlama: <http://127.0.0.1:8000/health> → `{"status": "ok", "agent_ready": true, ...}`
+Yoxlama: <http://127.0.0.1:8003/health> → `{"status": "ok", "agent_ready": true, ...}`
 
 ### Frontend
 
@@ -85,7 +85,7 @@ Brauzerdə <http://localhost:5173> açın. Səs funksiyaları üçün Chrome və
 
 | Dəyişən | Default |
 | --- | --- |
-| `VITE_WS_URL` | `ws://127.0.0.1:8000/ws/interview` |
+| `VITE_WS_URL` | `ws://127.0.0.1:8003/ws/interview` |
 | `VITE_INTERVIEW_ROLE` | `AI Engineer` |
 
 ## WebSocket protokolu
