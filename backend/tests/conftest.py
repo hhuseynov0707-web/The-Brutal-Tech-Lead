@@ -17,6 +17,7 @@ class FakeAgent:
             focus_areas=["Go concurrency"],
         )
         self.analyzed: list[str] = []
+        self.ocr_pages = 0
 
     def system_prompt(self, role: str, profile=None) -> dict[str, str]:
         extra = f" | {profile.as_prompt()}" if profile else ""
@@ -26,6 +27,12 @@ class FakeAgent:
         self.calls.append(messages)
         score = self.scores.pop(0) if self.scores else 70
         return Evaluation(response=f"Reply {len(self.calls)}", tech_score=score, stress_score=40)
+
+    async def transcribe_images(self, images: list[bytes]) -> str:
+        from tests.test_cv import CV_TEXT
+
+        self.ocr_pages += len(images)
+        return CV_TEXT
 
     async def analyze_cv(self, text: str) -> CandidateProfile:
         self.analyzed.append(text)

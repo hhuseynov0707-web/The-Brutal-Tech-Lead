@@ -3,7 +3,7 @@ import io
 import pytest
 from docx import Document
 
-from app.cv import CVError, ProfileStore, extract_text
+from app.cv import CVError, ProfileStore, load_cv
 from app.schemas import CandidateProfile
 
 CV_TEXT = (
@@ -23,18 +23,52 @@ def _docx_bytes(text: str) -> bytes:
     return buffer.getvalue()
 
 
+def _scanned_pdf_bytes(pages: int = 2) -> bytes:
+    """A PDF made only of images — no text layer, like a scanner produces."""
+    from PIL import Image
+
+    images = [Image.new("RGB", (600, 800), "white") for _ in range(pages)]
+    buffer = io.BytesIO()
+    images[0].save(buffer, "PDF", save_all=True, append_images=images[1:])
+    return buffer.getvalue()
+
+
+def _png_bytes() -> bytes:
+    from PIL import Image
+
+    buffer = io.BytesIO()
+    Image.new("RGB", (3000, 1500), "white").save(buffer, "PNG")
+    return buffer.getvalue()
+
+
 def test_extracts_txt_and_docx():
-    assert "Kafka" in extract_text("cv.txt", CV_TEXT.encode())
-    assert "settlement pipeline" in extract_text("cv.DOCX", _docx_bytes(CV_TEXT))
+    assert "Kafka" in load_cv("cv.txt", CV_TEXT.encode()).text
+    assert "settlement pipeline" in load_cv("cv.DOCX", _docx_bytes(CV_TEXT)).text
+
+
+def test_scanned_pdf_is_rendered_for_ocr():
+    document = load_cv("scan.pdf", _scanned_pdf_bytes(pages=6), max_ocr_pages=4)
+    assert document.needs_ocr
+    assert len(document.images) == 4
+    assert all(image.startswith(bytes([0xFF, 0xD8, 0xFF])) for image in document.images)  # JPEG
+
+
+def test_photo_is_downscaled_jpeg():
+    from PIL import Image
+
+    document = load_cv("photo.PNG", _png_bytes())
+    assert document.needs_ocr and len(document.images) == 1
+    with Image.open(io.BytesIO(document.images[0])) as image:
+        assert image.format == "JPEG" and max(image.size) <= 2000
 
 
 @pytest.mark.parametrize(
     ("name", "data"),
-    [("cv.exe", b"MZ"), ("cv.txt", b"too short"), ("cv.pdf", b"not a pdf"), ("cv", CV_TEXT.encode())],
+    [("cv.exe", b"MZ"), ("cv.txt", b"too short"), ("cv.pdf", b"not a pdf"), ("cv", CV_TEXT.encode()), ("cv.jpg", b"nope")],
 )
 def test_rejects_bad_files(name, data):
     with pytest.raises(CVError):
-        extract_text(name, data)
+        load_cv(name, data)
 
 
 def test_profile_store_expires_and_bounds():
@@ -96,3 +130,31 @@ def test_unknown_cv_id_is_reported(client):
     with client.websocket_connect("/ws/interview?cv_id=missing") as ws:
         message = ws.receive_json()
         assert message["type"] == "error"
+
+
+def test_upload_scanned_pdf_uses_ocr(client, fake_agent):
+    resp = client.post("/cv", files={"file": ("scan.pdf", _scanned_pdf_bytes(), "application/pdf")})
+    assert resp.status_code == 200
+    assert fake_agent.ocr_pages == 2
+    assert "Kafka" in fake_agent.analyzed[0]
+
+
+def test_upload_photo_uses_ocr(client, fake_agent):
+    resp = client.post("/cv", files={"file": ("cv.jpg", _png_bytes(), "image/jpeg")})
+    assert resp.status_code == 200 and fake_agent.ocr_pages == 1
+
+
+def test_ocr_failure_and_empty_ocr(client, fake_agent):
+    from app.agent import AgentError
+
+    async def broken(images):
+        raise AgentError("vision down")
+
+    fake_agent.transcribe_images = broken
+    assert client.post("/cv", files={"file": ("scan.pdf", _scanned_pdf_bytes(), "application/pdf")}).status_code == 502
+
+    async def blank(images):
+        return ""
+
+    fake_agent.transcribe_images = blank
+    assert client.post("/cv", files={"file": ("scan.pdf", _scanned_pdf_bytes(), "application/pdf")}).status_code == 422

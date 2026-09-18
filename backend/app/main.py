@@ -11,7 +11,7 @@ from pydantic import ValidationError
 
 from .agent import AgentError, TechLeadAgent
 from .config import get_settings
-from .cv import MAX_UPLOAD_BYTES, CVError, ProfileStore, extract_text
+from .cv import MAX_UPLOAD_BYTES, CVError, ProfileStore, load_cv, normalize_text
 from .questions import pick_opening_question
 from .schemas import CandidateProfile, ClientMessage, CVUploadResponse, Language, MessageType, ServerMessage, TTSRequest
 from .session import InterviewSession
@@ -63,7 +63,16 @@ async def upload_cv(request: Request, file: UploadFile = File(...)) -> CVUploadR
         raise HTTPException(status_code=413, detail="Fayl 5 MB-dan böyük ola bilməz.")
 
     try:
-        text = await asyncio.to_thread(extract_text, file.filename or "", data)
+        document = await asyncio.to_thread(load_cv, file.filename or "", data, settings.ocr_max_pages)
+        if document.needs_ocr:
+            logger.info("No text layer found, running OCR on %d page(s)", len(document.images))
+            try:
+                text = normalize_text(await agent.transcribe_images(document.images))
+            except AgentError as exc:
+                logger.warning("OCR failed: %s", exc)
+                raise HTTPException(status_code=502, detail="Skan edilmiş CV oxuna bilmədi. Bir az sonra yenidən cəhd et.") from exc
+        else:
+            text = normalize_text(document.text)
     except CVError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 

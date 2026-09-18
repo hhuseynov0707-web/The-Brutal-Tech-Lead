@@ -4,7 +4,8 @@ Sərt Tech-Lead ilə real vaxtda texniki **stress müsahibəsi** simulyatoru. Na
 
 ## Xüsusiyyətlər
 
-- **CV-yə əsaslanan müsahibə** — PDF / DOCX / TXT yüklə; agent hədəf rolu, səviyyəni, bacarıqları, layihələri və yoxlanılacaq mövzuları çıxarır, ilk sualı birbaşa CV-dəki layihədən verir və CV-dəki iddiaları yoxlayır
+- **CV-yə əsaslanan müsahibə** — PDF / DOCX / TXT və ya şəkil yüklə; agent hədəf rolu, səviyyəni, bacarıqları, layihələri və yoxlanılacaq mövzuları çıxarır, ilk sualı birbaşa CV-dəki layihədən verir və CV-dəki iddiaları yoxlayır
+- **OCR** — skan edilmiş PDF-lər və CV şəkilləri (JPG / PNG / WEBP) Groq vision modeli ilə oxunur; azərbaycan hərfləri (ə, ı, ş, ğ…) dəstəklənir, əlavə proqram quraşdırmaq lazım deyil
 - CV-siz rejim — istənilən rolu yazıb başlamaq olar
 - **Real vaxt WebSocket** əlaqəsi, avtomatik yenidən qoşulma (exponential backoff)
 - **Kontekstli agent** — söhbət tarixçəsini xatırlayır, əvvəlki cavablara əsasən sual verir
@@ -22,9 +23,9 @@ brutal-tech-lead/
 ├── backend/                  FastAPI + Groq
 │   ├── app/
 │   │   ├── main.py           HTTP /health, POST /cv, POST /tts + WebSocket /ws/interview
-│   │   ├── cv.py             CV mətninin çıxarılması + müvəqqəti profil yaddaşı
+│   │   ├── cv.py             CV mətninin çıxarılması, OCR üçün səhifələrin render-i, profil yaddaşı
 │   │   ├── config.py         .env-dən ayarlar
-│   │   ├── agent.py          Groq LLM agenti: CV analizi, açılış sualı, qiymətləndirmə
+│   │   ├── agent.py          Groq LLM agenti: OCR, CV analizi, açılış sualı, qiymətləndirmə
 │   │   ├── session.py        Müsahibə vəziyyəti: tarixçə, ballar, bitmə qaydaları
 │   │   ├── questions.py      Açılış sualları (sual bankı)
 │   │   ├── tts.py            edge-tts neural səs sintezi
@@ -80,6 +81,8 @@ Brauzerdə <http://localhost:5173> açın. Səs funksiyaları üçün Chrome və
 | --- | --- | --- |
 | `GROQ_API_KEY` | — | **Məcburi.** Groq API açarı |
 | `GROQ_MODEL` | `openai/gpt-oss-120b` | İstifadə olunan model |
+| `GROQ_VISION_MODEL` | `qwen/qwen3.8-27b` | Skan edilmiş CV-ləri oxuyan (OCR) vision model |
+| `OCR_MAX_PAGES` | `4` | Skan edilmiş PDF-dən oxunan maksimum səhifə sayı |
 | `INTERVIEW_ROLE` | `AI Engineer` | Nə CV, nə də rol göndərilmədikdə default rol |
 | `MAX_TURNS` | `8` | Müsahibədə raund sayı |
 | `HISTORY_WINDOW` | `12` | Agentə göndərilən son mesaj sayı |
@@ -96,7 +99,7 @@ Brauzerdə <http://localhost:5173> açın. Səs funksiyaları üçün Chrome və
 
 ## CV analizi
 
-`POST /cv` (multipart, sahə adı `file`; PDF / DOCX / TXT / MD, maksimum 5 MB) →
+`POST /cv` (multipart, sahə adı `file`; PDF / DOCX / TXT / MD / JPG / PNG / WEBP, maksimum 5 MB) →
 
 ```json
 {
@@ -113,7 +116,9 @@ Brauzerdə <http://localhost:5173> açın. Səs funksiyaları üçün Chrome və
 }
 ```
 
-Məxfilik: fayl diskə yazılmır, xam CV mətni saxlanılmır — yalnız çıxarılmış profil 2 saat müddətinə yaddaşda qalır. CV mətni analiz üçün Groq API-yə göndərilir. Skan edilmiş (şəkil) PDF-lərdən mətn çıxarıla bilmir.
+PDF-in mətn qatı yoxdursa (skan edilmiş sənəd), ilk `OCR_MAX_PAGES` səhifə şəkilə çevrilir və Groq vision modeli ilə oxunur (səhifələr paralel emal olunur). Şəkil yükləndikdə də eyni yol işləyir.
+
+Məxfilik: fayl diskə yazılmır, xam CV mətni saxlanılmır — yalnız çıxarılmış profil 2 saat müddətinə yaddaşda qalır. CV mətni (skan olunubsa, səhifə şəkilləri) analiz üçün Groq API-yə göndərilir.
 
 ## WebSocket protokolu
 

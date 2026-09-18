@@ -27,6 +27,8 @@ def _list(value: str | None, default: list[str]) -> list[str]:
 class Settings:
     groq_api_key: str = ""
     groq_model: str = "openai/gpt-oss-120b"
+    groq_vision_model: str = "qwen/qwen3.8-27b"
+    ocr_max_pages: int = 4
     interview_role: str = "AI Engineer"
     max_turns: int = 8
     history_window: int = 12
@@ -42,6 +44,8 @@ class Settings:
         return cls(
             groq_api_key=os.getenv("GROQ_API_KEY", "").strip(),
             groq_model=os.getenv("GROQ_MODEL", defaults.groq_model),
+            groq_vision_model=os.getenv("GROQ_VISION_MODEL", defaults.groq_vision_model),
+            ocr_max_pages=int(os.getenv("OCR_MAX_PAGES", defaults.ocr_max_pages)),
             interview_role=os.getenv("INTERVIEW_ROLE", defaults.interview_role),
             max_turns=int(os.getenv("MAX_TURNS", defaults.max_turns)),
             history_window=int(os.getenv("HISTORY_WINDOW", defaults.history_window)),

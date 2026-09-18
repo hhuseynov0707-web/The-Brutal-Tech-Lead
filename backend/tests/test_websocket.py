@@ -1,5 +1,7 @@
 import json
 
+from app.questions import QUESTION_BANK
+
 
 def test_health(client):
     body = client.get("/health").json()
@@ -48,4 +50,5 @@ def test_opening_question_falls_back_to_bank(client, fake_agent):
     fake_agent.opening_question = broken
     with client.websocket_connect("/ws/interview?role=Python%20Engineer") as ws:
         opening = ws.receive_json()
-        assert opening["type"] == "question" and "?" in opening["ai_reply"]
+        assert opening["type"] == "question"
+        assert opening["ai_reply"] in QUESTION_BANK["python engineer"]

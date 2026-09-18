@@ -39,7 +39,7 @@ function Dropzone({ onFile, busy }) {
             📄
           </span>
           <span className="text-sm font-semibold text-neutral-200">CV-ni bura at və ya seçmək üçün kliklə</span>
-          <span className="text-xs text-neutral-500">PDF, DOCX, TXT · maksimum 5 MB</span>
+          <span className="text-xs text-neutral-500">PDF (skan da olar), DOCX, TXT, şəkil · maksimum 5 MB</span>
         </>
       )}
       <input

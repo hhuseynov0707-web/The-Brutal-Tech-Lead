@@ -1,6 +1,6 @@
 import { API_URL } from './config'
 
-export const CV_ACCEPT = '.pdf,.docx,.txt,.md'
+export const CV_ACCEPT = '.pdf,.docx,.txt,.md,.png,.jpg,.jpeg,.webp'
 export const CV_MAX_BYTES = 5 * 1024 * 1024
 
 /** Upload a CV and return `{ cv_id, profile }`. Throws an Error with a user-facing message. */
