@@ -1,9 +1,11 @@
 # The Brutal Tech-Lead
 
-Sərt Tech-Lead ilə real vaxtda texniki **stress müsahibəsi** simulyatoru. Namizəd yazılı və ya səsli cavab verir, LLM agent (Groq) cavabı qiymətləndirir, tənqid edir və növbəti, daha çətin sualı verir. Texniki dəqiqlik və stres səviyyəsi canlı göstərilir; müsahibə sonunda **qəbul / rədd** qərarı verilir.
+Sərt Tech-Lead ilə real vaxtda texniki **stress müsahibəsi** simulyatoru. Namizəd CV-sini yükləyir — agent sahəni, səviyyəni və layihələri analiz edib müsahibəni məhz o profilə uyğun qurur (Android, Backend, Data, DevOps və s.). Namizəd yazılı və ya səsli cavab verir, LLM agent (Groq) cavabı qiymətləndirir, tənqid edir və növbəti, daha çətin sualı verir. Texniki dəqiqlik və stres səviyyəsi canlı göstərilir; müsahibə sonunda **qəbul / rədd** qərarı verilir.
 
 ## Xüsusiyyətlər
 
+- **CV-yə əsaslanan müsahibə** — PDF / DOCX / TXT yüklə; agent hədəf rolu, səviyyəni, bacarıqları, layihələri və yoxlanılacaq mövzuları çıxarır, ilk sualı birbaşa CV-dəki layihədən verir və CV-dəki iddiaları yoxlayır
+- CV-siz rejim — istənilən rolu yazıb başlamaq olar
 - **Real vaxt WebSocket** əlaqəsi, avtomatik yenidən qoşulma (exponential backoff)
 - **Kontekstli agent** — söhbət tarixçəsini xatırlayır, əvvəlki cavablara əsasən sual verir
 - **Təbii səs** — Microsoft Edge neural səsləri ilə TTS (`edge-tts`, pulsuz, API açarı lazım deyil); işləməsə brauzer səsinə keçir
@@ -19,9 +21,10 @@ Sərt Tech-Lead ilə real vaxtda texniki **stress müsahibəsi** simulyatoru. Na
 brutal-tech-lead/
 ├── backend/                  FastAPI + Groq
 │   ├── app/
-│   │   ├── main.py           HTTP /health, POST /tts + WebSocket /ws/interview
+│   │   ├── main.py           HTTP /health, POST /cv, POST /tts + WebSocket /ws/interview
+│   │   ├── cv.py             CV mətninin çıxarılması + müvəqqəti profil yaddaşı
 │   │   ├── config.py         .env-dən ayarlar
-│   │   ├── agent.py          Groq LLM agenti, JSON cavabın təhlili
+│   │   ├── agent.py          Groq LLM agenti: CV analizi, açılış sualı, qiymətləndirmə
 │   │   ├── session.py        Müsahibə vəziyyəti: tarixçə, ballar, bitmə qaydaları
 │   │   ├── questions.py      Açılış sualları (sual bankı)
 │   │   ├── tts.py            edge-tts neural səs sintezi
@@ -32,7 +35,8 @@ brutal-tech-lead/
     └── src/
         ├── App.jsx
         ├── config.js
-        ├── components/       Header, ScoreCard, ProgressCard, ChatWindow, Composer, VerdictBanner
+        ├── api.js            CV yükləmə
+        ├── components/       SetupScreen, ProfileCard, InterviewScreen, Header, ScoreCard, ChatWindow, Composer, …
         └── hooks/            useInterview, useReconnectingSocket, useSpeech
 ```
 
@@ -76,7 +80,7 @@ Brauzerdə <http://localhost:5173> açın. Səs funksiyaları üçün Chrome və
 | --- | --- | --- |
 | `GROQ_API_KEY` | — | **Məcburi.** Groq API açarı |
 | `GROQ_MODEL` | `openai/gpt-oss-120b` | İstifadə olunan model |
-| `INTERVIEW_ROLE` | `AI Engineer` | Client rol göndərmədikdə default rol |
+| `INTERVIEW_ROLE` | `AI Engineer` | Nə CV, nə də rol göndərilmədikdə default rol |
 | `MAX_TURNS` | `8` | Müsahibədə raund sayı |
 | `HISTORY_WINDOW` | `12` | Agentə göndərilən son mesaj sayı |
 | `CORS_ORIGINS` | `http://localhost:5173,...` | İcazə verilən originlər |
@@ -88,12 +92,33 @@ Brauzerdə <http://localhost:5173> açın. Səs funksiyaları üçün Chrome və
 | Dəyişən | Default |
 | --- | --- |
 | `VITE_WS_URL` | `ws://127.0.0.1:8003/ws/interview` |
-| `VITE_INTERVIEW_ROLE` | `AI Engineer` |
 | `VITE_API_URL` | `VITE_WS_URL`-in hostu (`http://127.0.0.1:8003`) |
+
+## CV analizi
+
+`POST /cv` (multipart, sahə adı `file`; PDF / DOCX / TXT / MD, maksimum 5 MB) →
+
+```json
+{
+  "cv_id": "…",
+  "profile": {
+    "target_role": "Android Developer (Kotlin)",
+    "seniority": "senior",
+    "years_experience": 7,
+    "skills": ["Kotlin", "Jetpack Compose", "…"],
+    "projects": ["…"],
+    "focus_areas": ["Kotlin Coroutines və Flow-da error handling", "…"],
+    "summary": "…"
+  }
+}
+```
+
+Məxfilik: fayl diskə yazılmır, xam CV mətni saxlanılmır — yalnız çıxarılmış profil 2 saat müddətinə yaddaşda qalır. CV mətni analiz üçün Groq API-yə göndərilir. Skan edilmiş (şəkil) PDF-lərdən mətn çıxarıla bilmir.
 
 ## WebSocket protokolu
 
-`ws://<host>/ws/interview?role=<rol>`
+`ws://<host>/ws/interview?cv_id=<id>&lang=az-AZ` — CV ilə
+`ws://<host>/ws/interview?role=<rol>&lang=en-US` — CV-siz
 
 Client → server:
 

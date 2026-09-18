@@ -12,7 +12,7 @@ const MAX_BACKOFF_MS = 10_000
 /**
  * A WebSocket that reconnects with exponential backoff.
  * Handlers are read through a ref, so they may change between renders freely.
- * `shouldReconnect()` is consulted after every close.
+ * `shouldReconnect(closeEvent)` is consulted after every close.
  */
 export function useReconnectingSocket(url, handlers) {
   const [readyState, setReadyState] = useState(ReadyState.CONNECTING)
@@ -39,11 +39,11 @@ export function useReconnectingSocket(url, handlers) {
         handlersRef.current.onOpen?.()
       }
       socket.onmessage = (event) => handlersRef.current.onMessage?.(event)
-      socket.onclose = () => {
+      socket.onclose = (event) => {
         if (disposed) return
         setReadyState(ReadyState.CLOSED)
-        handlersRef.current.onClose?.()
-        if (handlersRef.current.shouldReconnect?.() ?? true) {
+        handlersRef.current.onClose?.(event)
+        if (handlersRef.current.shouldReconnect?.(event) ?? true) {
           const delay = Math.min(1000 * 2 ** attempt, MAX_BACKOFF_MS)
           attempt += 1
           retryTimer = setTimeout(connect, delay)

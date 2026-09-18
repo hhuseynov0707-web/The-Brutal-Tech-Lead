@@ -1,51 +1,41 @@
 import { useState } from 'react'
-import { ChatWindow } from './components/ChatWindow'
-import { Composer } from './components/Composer'
 import { Header } from './components/Header'
-import { ProgressCard } from './components/ProgressCard'
-import { ScoreCard } from './components/ScoreCard'
-import { VerdictBanner } from './components/VerdictBanner'
-import { INTERVIEW_ROLE, SPEECH_LANGUAGES } from './config'
-import { useInterview } from './hooks/useInterview'
+import { InterviewScreen } from './components/InterviewScreen'
+import { SetupScreen } from './components/SetupScreen'
+import { SPEECH_LANGUAGES } from './config'
 import { useSpeech } from './hooks/useSpeech'
 
-const techTone = (score) => (score >= 70 ? 'good' : score >= 40 ? 'warn' : 'bad')
-const stressTone = (score) => (score <= 40 ? 'good' : score <= 70 ? 'warn' : 'bad')
+let sessionCounter = 0
 
 export default function App() {
   const [lang, setLang] = useState(SPEECH_LANGUAGES[0].code)
+  const [setup, setSetup] = useState(null) // { id, cvId?, role, lang } once the interview starts
   const speech = useSpeech(lang)
-  const interview = useInterview({ onAgentReply: speech.speak })
-  const { scores, progress } = interview
+
+  const headerProps = {
+    lang,
+    onLangChange: setLang,
+    muted: speech.muted,
+    speaking: speech.speaking,
+    onToggleMute: speech.toggleMute,
+  }
+
+  const exit = () => {
+    speech.stopSpeaking()
+    setSetup(null)
+  }
 
   return (
     <div className="mx-auto flex h-full max-w-5xl flex-col gap-4 p-4 sm:p-6">
-      <Header
-        role={INTERVIEW_ROLE}
-        readyState={interview.readyState}
-        lang={lang}
-        onLangChange={setLang}
-        muted={speech.muted}
-        speaking={speech.speaking}
-        onToggleMute={speech.toggleMute}
-      />
-
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <ScoreCard label="Texniki dəqiqlik" value={scores.tech} tone={techTone(scores.tech)} />
-        <ScoreCard label="Stres səviyyəsi" value={scores.stress} tone={stressTone(scores.stress)} />
-        <ProgressCard turn={progress.turn} maxTurns={progress.maxTurns} />
-      </div>
-
-      <ChatWindow messages={interview.messages} typing={interview.awaitingReply && interview.isConnected} />
-
-      {interview.verdict ? (
-        <VerdictBanner verdict={interview.verdict} onRestart={interview.restart} />
+      {setup ? (
+        <InterviewScreen key={setup.id} setup={setup} headerProps={headerProps} speech={speech} onExit={exit} />
       ) : (
-        <Composer
-          disabled={!interview.canAnswer}
-          onSend={(text) => interview.sendAnswer(text, lang)}
-          speech={speech}
-        />
+        <>
+          <Header {...headerProps} />
+          <main className="flex flex-1 items-start justify-center overflow-y-auto py-4 sm:items-center">
+            <SetupScreen onStart={(config) => setSetup({ ...config, lang, id: ++sessionCounter })} />
+          </main>
+        </>
       )}
     </div>
   )

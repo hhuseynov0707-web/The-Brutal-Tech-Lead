@@ -37,3 +37,15 @@ def test_missing_agent_reports_error(client):
     client.app.state.agent = None
     with client.websocket_connect("/ws/interview") as ws:
         assert ws.receive_json()["type"] == "error"
+
+
+def test_opening_question_falls_back_to_bank(client, fake_agent):
+    from app.agent import AgentError
+
+    async def broken(profile, lang):
+        raise AgentError("down")
+
+    fake_agent.opening_question = broken
+    with client.websocket_connect("/ws/interview?role=Python%20Engineer") as ws:
+        opening = ws.receive_json()
+        assert opening["type"] == "question" and "?" in opening["ai_reply"]

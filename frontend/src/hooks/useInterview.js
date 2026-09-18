@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { INTERVIEW_ROLE, WS_URL } from '../config'
+import { WS_URL } from '../config'
 import { ReadyState, useReconnectingSocket } from './useReconnectingSocket'
 
 const INITIAL_SCORES = { tech: 100, stress: 0 }
@@ -7,17 +7,21 @@ const INITIAL_SCORES = { tech: 100, stress: 0 }
 let messageId = 0
 const nextId = () => ++messageId
 
+// Server close codes after which reconnecting cannot help.
+const FATAL_CLOSE_CODES = new Set([1011, 4404])
+
 /**
  * Owns the interview WebSocket and all conversation state.
- * `onAgentReply` is called with the text of every Tech-Lead message (used for TTS).
+ * `setup` is `{ cvId?, role?, lang }`; `onAgentReply` receives every Tech-Lead message (used for TTS).
  */
-export function useInterview({ onAgentReply } = {}) {
+export function useInterview({ setup, onAgentReply }) {
   const [messages, setMessages] = useState([])
   const [scores, setScores] = useState(INITIAL_SCORES)
   const [progress, setProgress] = useState({ turn: 0, maxTurns: 0 })
   const [awaitingReply, setAwaitingReply] = useState(false)
   const [verdict, setVerdict] = useState(null)
   const [sessionKey, setSessionKey] = useState(0)
+  const [fatal, setFatal] = useState(false)
 
   const finishedRef = useRef(false)
   const onAgentReplyRef = useRef(onAgentReply)
@@ -25,10 +29,14 @@ export function useInterview({ onAgentReply } = {}) {
     onAgentReplyRef.current = onAgentReply
   }, [onAgentReply])
 
+  const { cvId, role, lang } = setup
   const url = useMemo(() => {
-    const params = new URLSearchParams({ role: INTERVIEW_ROLE, s: String(sessionKey) })
+    const params = new URLSearchParams({ s: String(sessionKey) })
+    if (cvId) params.set('cv_id', cvId)
+    else if (role) params.set('role', role)
+    if (lang) params.set('lang', lang)
     return `${WS_URL}?${params}`
-  }, [sessionKey])
+  }, [cvId, role, lang, sessionKey])
 
   const handleMessage = useCallback((event) => {
     let data
@@ -65,8 +73,11 @@ export function useInterview({ onAgentReply } = {}) {
       setAwaitingReply(true)
     },
     onMessage: handleMessage,
-    onClose: () => setAwaitingReply(false),
-    shouldReconnect: () => !finishedRef.current,
+    onClose: (event) => {
+      setAwaitingReply(false)
+      if (FATAL_CLOSE_CODES.has(event.code)) setFatal(true)
+    },
+    shouldReconnect: (event) => !finishedRef.current && !FATAL_CLOSE_CODES.has(event.code),
   })
 
   const isConnected = readyState === ReadyState.OPEN
@@ -84,7 +95,10 @@ export function useInterview({ onAgentReply } = {}) {
     [canAnswer, send],
   )
 
-  const restart = useCallback(() => setSessionKey((key) => key + 1), [])
+  const restart = useCallback(() => {
+    setFatal(false)
+    setSessionKey((key) => key + 1)
+  }, [])
 
   return {
     messages,
@@ -95,6 +109,7 @@ export function useInterview({ onAgentReply } = {}) {
     readyState,
     isConnected,
     canAnswer,
+    fatal,
     sendAnswer,
     restart,
   }

@@ -1,17 +1,19 @@
-"""FastAPI entrypoint: health check, text-to-speech and the interview WebSocket."""
+"""FastAPI entrypoint: health check, CV upload, text-to-speech and the interview WebSocket."""
 
+import asyncio
 import json
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException, Query, Response, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, File, HTTPException, Query, Request, Response, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import ValidationError
 
 from .agent import AgentError, TechLeadAgent
 from .config import get_settings
+from .cv import MAX_UPLOAD_BYTES, CVError, ProfileStore, extract_text
 from .questions import pick_opening_question
-from .schemas import ClientMessage, MessageType, ServerMessage, TTSRequest
+from .schemas import CandidateProfile, ClientMessage, CVUploadResponse, Language, MessageType, ServerMessage, TTSRequest
 from .session import InterviewSession
 from .tts import TTSError, synthesize
 
@@ -25,6 +27,7 @@ logger = logging.getLogger("brutal_tech_lead")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    app.state.profiles = ProfileStore()
     try:
         app.state.agent = TechLeadAgent(settings)
     except AgentError as exc:
@@ -46,6 +49,47 @@ app.add_middleware(
 @app.get("/health")
 async def health() -> dict[str, object]:
     return {"status": "ok", "agent_ready": app.state.agent is not None, "model": settings.groq_model}
+
+
+@app.post("/cv", response_model=CVUploadResponse)
+async def upload_cv(request: Request, file: UploadFile = File(...)) -> CVUploadResponse:
+    """Extract a CV's text, let the agent build a profile, and keep it for the interview."""
+    agent: TechLeadAgent | None = request.app.state.agent
+    if agent is None:
+        raise HTTPException(status_code=503, detail="Server konfiqurasiya olunmayıb: GROQ_API_KEY tapılmadı.")
+
+    data = await file.read(MAX_UPLOAD_BYTES + 1)
+    if len(data) > MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail="Fayl 5 MB-dan böyük ola bilməz.")
+
+    try:
+        text = await asyncio.to_thread(extract_text, file.filename or "", data)
+    except CVError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    try:
+        profile = await agent.analyze_cv(text)
+    except AgentError as exc:
+        logger.warning("CV analysis failed: %s", exc)
+        raise HTTPException(status_code=502, detail="CV analiz edilə bilmədi. Bir az sonra yenidən cəhd et.") from exc
+
+    if not profile.is_cv:
+        raise HTTPException(status_code=422, detail="Bu sənəd texniki CV kimi tanınmadı.")
+
+    cv_id = request.app.state.profiles.put(profile)
+    logger.info("CV analysed (role=%r, seniority=%r)", profile.target_role, profile.seniority)
+    return CVUploadResponse(cv_id=cv_id, profile=profile)
+
+
+async def _opening_question(agent: TechLeadAgent, role: str, profile: CandidateProfile | None, lang: str | None) -> str:
+    """Tailored first question from the agent; the static question bank is the fallback."""
+    if settings.enable_scraper and profile is None:
+        return await pick_opening_question(role, use_scraper=True)
+    try:
+        return await agent.opening_question(profile or CandidateProfile(target_role=role), lang)
+    except AgentError as exc:
+        logger.warning("Opening question generation failed, using question bank: %s", exc)
+    return await pick_opening_question(role)
 
 
 @app.post("/tts", response_class=Response, responses={200: {"content": {"audio/mpeg": {}}}})
@@ -74,7 +118,12 @@ async def _send(websocket: WebSocket, message: ServerMessage) -> None:
 
 
 @app.websocket("/ws/interview")
-async def interview_websocket(websocket: WebSocket, role: str | None = Query(default=None, max_length=80)):
+async def interview_websocket(
+    websocket: WebSocket,
+    role: str | None = Query(default=None, max_length=120),
+    cv_id: str | None = Query(default=None, max_length=64),
+    lang: Language | None = Query(default=None),
+):
     await websocket.accept()
     agent: TechLeadAgent | None = websocket.app.state.agent
 
@@ -86,17 +135,28 @@ async def interview_websocket(websocket: WebSocket, role: str | None = Query(def
         await websocket.close(code=1011)
         return
 
-    role = (role or settings.interview_role).strip() or settings.interview_role
-    first_question = await pick_opening_question(role, use_scraper=settings.enable_scraper)
+    profile: CandidateProfile | None = None
+    if cv_id:
+        profile = websocket.app.state.profiles.get(cv_id)
+        if profile is None:
+            await _send(websocket, ServerMessage(
+                type=MessageType.ERROR,
+                ai_reply="CV sessiyasının vaxtı bitib. CV-ni yenidən yüklə.",
+            ))
+            await websocket.close(code=4404)
+            return
+
+    role = profile.target_role if profile else (role or settings.interview_role).strip() or settings.interview_role
+    first_question = await _opening_question(agent, role, profile, lang)
     session = InterviewSession(
         role=role,
         first_question=first_question,
-        system_message=agent.system_prompt(role),
+        system_message=agent.system_prompt(role, profile),
         evaluator=agent.evaluate,
         max_turns=settings.max_turns,
         history_window=settings.history_window,
     )
-    logger.info("Interview started (role=%r)", role)
+    logger.info("Interview started (role=%r, from_cv=%s)", role, profile is not None)
     await _send(websocket, session.opening_message())
 
     try:

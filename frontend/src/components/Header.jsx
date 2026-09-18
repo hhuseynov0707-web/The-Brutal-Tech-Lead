@@ -8,26 +8,37 @@ const STATUS = {
   [ReadyState.CLOSED]: { label: 'Bağlantı yoxdur', dot: 'bg-red-500' },
 }
 
-export function Header({ role, readyState, lang, onLangChange, muted, speaking, onToggleMute }) {
-  const status = STATUS[readyState] ?? STATUS[ReadyState.CLOSED]
+export function Header({ role, readyState, lang, onLangChange, muted, speaking, onToggleMute, onExit }) {
+  const status = readyState == null ? null : (STATUS[readyState] ?? STATUS[ReadyState.CLOSED])
 
   return (
     <header className="flex flex-wrap items-center justify-between gap-4">
       <div>
         <h1 className="text-xl font-bold uppercase tracking-[0.2em] text-red-500 sm:text-2xl">The Brutal Tech-Lead</h1>
         <p className="mt-1 text-xs text-neutral-500">
-          Stress müsahibəsi · <span className="text-neutral-300">{role}</span>
+          Stress müsahibəsi{role && <> · <span className="text-neutral-300">{role}</span></>}
         </p>
       </div>
 
-      <div className="flex items-center gap-2">
-        <span
-          className="flex items-center gap-2 rounded-full border border-neutral-800 bg-neutral-900 px-3 py-1.5 text-xs text-neutral-300"
-          role="status"
-        >
-          <span className={`size-2 rounded-full ${status.dot}`} aria-hidden="true" />
-          {status.label}
-        </span>
+      <div className="flex flex-wrap items-center gap-2">
+        {onExit && (
+          <button
+            type="button"
+            onClick={onExit}
+            className="rounded-full border border-neutral-800 bg-neutral-900 px-3 py-1.5 text-xs text-neutral-400 transition-colors hover:border-neutral-600 hover:text-neutral-200"
+          >
+            ← Çıxış
+          </button>
+        )}
+        {status && (
+          <span
+            className="flex items-center gap-2 rounded-full border border-neutral-800 bg-neutral-900 px-3 py-1.5 text-xs text-neutral-300"
+            role="status"
+          >
+            <span className={`size-2 rounded-full ${status.dot}`} aria-hidden="true" />
+            {status.label}
+          </span>
+        )}
 
         <div className="flex rounded-full border border-neutral-800 bg-neutral-900 p-0.5" role="group" aria-label="Nitq dili">
           {SPEECH_LANGUAGES.map(({ code, label }) => (

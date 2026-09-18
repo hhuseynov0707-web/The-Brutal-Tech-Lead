@@ -1,5 +1,4 @@
 export const WS_URL = import.meta.env.VITE_WS_URL ?? 'ws://127.0.0.1:8003/ws/interview'
-export const INTERVIEW_ROLE = import.meta.env.VITE_INTERVIEW_ROLE ?? 'AI Engineer'
 
 // HTTP base of the backend; derived from WS_URL unless set explicitly.
 function httpOrigin(wsUrl) {
